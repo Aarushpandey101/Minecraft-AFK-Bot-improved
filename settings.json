@@ -1,0 +1,95 @@
+{
+  "name": "AFK Bot",
+  "bot-account": {
+    "username": "Technoblade",
+    "password": "",
+    "type": "offline"
+  },
+  "server": {
+    "ip": "Homeground-axHO.aternos.me",
+    "port": 12599,
+    "version": "1.19.3",
+    "check-timeout-interval": 180000
+  },
+  "position": {
+    "enabled": true,
+    "x": 0,
+    "y": 100,
+    "z": 0
+  },
+  "utils": {
+    "auto-auth": {
+      "enabled": true,
+      "password": "Slobos"
+    },
+    "anti-afk": {
+      "enabled": true,
+      "sneak": true
+    },
+    "chat-messages": {
+      "enabled": true,
+      "repeat": true,
+      "repeat-delay": 500,
+      "messages": [
+        "I'm a regular player",
+        "Subscribe to Slobos!",
+        "I like to play Minecraft!"
+      ]
+    },
+    "chat-log": true,
+    "auto-reconnect": true,
+    "auto-reconnect-delay": 4000,
+    "max-reconnect-delay": 12000,
+    "network-reconnect-delay": 3000,
+    "duplicate-login-reconnect-delay": 18000,
+    "periodic-rejoin-reconnect-delay": 18000,
+    "periodic-rejoin": {
+      "enabled": true,
+      "min-interval": 180,
+      "max-interval": 420
+    }
+  },
+  "movement": {
+    "enabled": true,
+    "circle-walk": {
+      "enabled": true,
+      "radius": 4,
+      "speed": 3000
+    },
+    "look-around": {
+      "enabled": true,
+      "interval": 5000
+    },
+    "random-jump": {
+      "enabled": true,
+      "interval": 10000
+    }
+  },
+  "modules": {
+    "avoidMobs": true,
+    "combat": true,
+    "beds": true,
+    "chat": true,
+    "console-commands": true
+  },
+  "combat": {
+    "attack-mobs": true,
+    "auto-eat": true
+  },
+  "beds": {
+    "pick-up-day": true,
+    "place-night": true
+  },
+  "discord": {
+    "enabled": false,
+    "webhookUrl": "",
+    "events": {
+      "connect": true,
+      "disconnect": true,
+      "chat": false
+    }
+  },
+  "chat": {
+    "respond": true
+  }
+}

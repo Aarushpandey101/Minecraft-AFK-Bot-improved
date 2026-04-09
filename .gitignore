@@ -1,0 +1,7 @@
+node_modules/
+local-slobos.log
+local-slobos.err
+npm-debug.log*
+*.log
+*.err
+.env
