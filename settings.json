@@ -45,8 +45,8 @@
     "periodic-rejoin-reconnect-delay": 18000,
     "periodic-rejoin": {
       "enabled": true,
-      "min-interval": 180,
-      "max-interval": 420
+      "min-interval": 300,
+      "max-interval": 600
     }
   },
   "movement": {
@@ -81,11 +81,13 @@
     "place-night": true
   },
   "discord": {
-    "enabled": false,
-    "webhookUrl": "",
+    "enabled": true,
+    "webhookUrl": "https://discord.com/api/webhooks/1492559899996065932/sABH__fluURPvJOwI37SjGS-Cgp1ODsaEMIxAUcpKKtcWkIwlOUaHwiIKQFCRCx2BOG5",
+    "userMentionId": "909007152469905450",
     "events": {
-      "connect": true,
-      "disconnect": true,
+      "connect": false,
+      "disconnect": false,
+      "ban": true,
       "chat": false
     }
   },

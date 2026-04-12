@@ -9,7 +9,12 @@ const http = require('http');
 // EXPRESS SERVER - Keep Render/Aternos alive
 // ============================================================
 const app = express();
-const PORT = process.env.PORT || 5000;
+const HTTP_PORT = Number(
+  process.env.PORT ||
+  process.env.SERVER_PORT ||
+  process.env.PTERODACTYL_PORT ||
+  5000
+);
 
 // Bot state tracking
 let botState = {
@@ -18,7 +23,9 @@ let botState = {
   reconnectAttempts: 0,
   startTime: Date.now(),
   lastSpawnAt: null,
-  errors: []
+  errors: [],
+  banPaused: false,
+  banReason: null
 };
 
 // Health check endpoint for monitoring
@@ -170,6 +177,11 @@ app.get('/', (req, res) => {
                 statusText.style.color = '#2dd4bf';
                 liveDot.style.color = '#4ade80'; // Green pulse
                 container.style.boxShadow = '0 0 50px rgba(45, 212, 191, 0.2)';
+              } else if (data.status === 'paused-banned') {
+                statusText.innerHTML = '<span class="status-dot" style="color: #f59e0b;"></span> Paused (Ban Detected)';
+                statusText.style.color = '#f59e0b';
+                liveDot.style.color = '#f59e0b';
+                container.style.boxShadow = '0 0 50px rgba(245, 158, 11, 0.2)';
               } else {
                 statusText.innerHTML = '<span class="status-dot" style="color: #f87171;"></span> Reconnecting...';
                 statusText.style.color = '#f87171';
@@ -262,21 +274,22 @@ app.get('/health', (req, res) => {
     ? Math.floor((Date.now() - botState.lastSpawnAt) / 1000)
     : 0;
   res.json({
-    status: botState.connected ? 'connected' : 'disconnected',
+    status: botState.banPaused ? 'paused-banned' : (botState.connected ? 'connected' : 'disconnected'),
     uptime: Math.floor((Date.now() - botState.startTime) / 1000),
     sessionUptime,
     lastSpawnAt: botState.lastSpawnAt ? new Date(botState.lastSpawnAt).toISOString() : null,
     coords: (bot && bot.entity) ? bot.entity.position : null,
     lastActivity: botState.lastActivity,
     reconnectAttempts: botState.reconnectAttempts,
-    memoryUsage: process.memoryUsage().heapUsed / 1024 / 1024
+    memoryUsage: process.memoryUsage().heapUsed / 1024 / 1024,
+    banReason: botState.banReason
   });
 });
 
 app.get('/ping', (req, res) => res.send('pong'));
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[Server] HTTP server started on port ${PORT}`);
+app.listen(HTTP_PORT, '0.0.0.0', () => {
+  console.log(`[Server] HTTP server started on port ${HTTP_PORT}`);
 });
 
 function formatUptime(seconds) {
@@ -284,6 +297,56 @@ function formatUptime(seconds) {
   const m = Math.floor((seconds % 3600) / 60);
   const s = seconds % 60;
   return `${h}h ${m}m ${s}s`;
+}
+
+function normalizeReason(reason) {
+  if (reason == null) return 'No specific reason provided';
+  if (typeof reason === 'string') return reason;
+  if (typeof reason === 'number' || typeof reason === 'boolean') return String(reason);
+  try {
+    if (typeof reason === 'object') {
+      if (typeof reason.text === 'string' && reason.text.trim()) return reason.text;
+      if (typeof reason.reason === 'string' && reason.reason.trim()) return reason.reason;
+      if (typeof reason.message === 'string' && reason.message.trim()) return reason.message;
+    }
+    return JSON.stringify(reason);
+  } catch {
+    return String(reason);
+  }
+}
+
+function cleanBanReason(reasonText) {
+  const text = normalizeReason(reasonText);
+  return text.replace(/Reason:\s*null/gi, 'Reason: No specific reason provided');
+}
+
+function isBanLikeReason(reason) {
+  const text = normalizeReason(reason).toLowerCase();
+  return (
+    text.includes('you are banned') ||
+    text.includes('banned from this server') ||
+    text.includes('ban from this server') ||
+    text.includes('temporarily banned') ||
+    text.includes('idle for too long') ||
+    text.includes('violates our terms of service')
+  );
+}
+
+function pauseForBan(normalizedReason, source) {
+  const displayReason = cleanBanReason(normalizedReason);
+  botState.banPaused = true;
+  botState.banReason = displayReason;
+  console.log(`[Bot] Ban/idle kick detected from ${source}. Auto-reconnect is now paused until you unban the bot and restart the service.`);
+
+  if (config.discord && config.discord.enabled && (!config.discord.events || config.discord.events.ban !== false)) {
+    const mention = config.discord.userMentionId ? `<@${config.discord.userMentionId}> ` : '';
+    sendDiscordWebhook(
+      `${mention}[BAN ALERT] **${config['bot-account'].username}** was banned or idle-kicked.\nServer: \`${config.server.ip}:${config.server.port}\`\nReason: ${displayReason}\nAction needed: unban the bot and restart the service. Restart required after unban.`,
+      0xf59e0b
+    );
+  }
+
+  destroyCurrentBot();
 }
 
 // ============================================================
@@ -295,7 +358,7 @@ const https = require('https');
 
 function startSelfPing() {
   setInterval(() => {
-    const url = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+    const url = process.env.RENDER_EXTERNAL_URL || `http://localhost:${HTTP_PORT}`;
     const protocol = url.startsWith('https') ? https : http;
 
     try {
@@ -352,11 +415,20 @@ function clearConnectionTimeout() {
   }
 }
 
+function clearReconnectState() {
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
+  isReconnecting = false;
+}
+
 function destroyCurrentBot() {
   if (!bot) return;
 
   clearAllIntervals();
   clearConnectionTimeout();
+  clearReconnectState();
 
   try {
     bot.removeAllListeners();
@@ -401,8 +473,8 @@ function getReconnectDelay(reason = 'generic') {
 }
 
 function createBot() {
-  if (isReconnecting) {
-    console.log('[Bot] Already reconnecting, skipping...');
+  if (botState.banPaused) {
+    console.log('[Bot] Bot creation skipped because service is paused after a ban/idle kick.');
     return;
   }
 
@@ -412,6 +484,7 @@ function createBot() {
   // Cleanup previous bot
   destroyCurrentBot();
 
+  clearReconnectState();
   botState.connected = false;
   intentionalLeaveInProgress = false;
 
@@ -525,12 +598,23 @@ function createBot() {
     bot.on('end', (reason) => {
       if (attemptId !== currentConnectAttempt) return;
       clearConnectionTimeout();
-      console.log(`[Bot] Disconnected: ${reason || 'Unknown reason'}`);
+      const normalizedReason = normalizeReason(reason);
+      console.log(`[Bot] Disconnected: ${normalizedReason || 'Unknown reason'}`);
       botState.connected = false;
       clearAllIntervals();
 
-      if (config.discord && config.discord.events.disconnect && reason !== 'Periodic Rejoin') {
-        sendDiscordWebhook(`[-] **Disconnected**: ${reason || 'Unknown'}`, 0xf87171); // Red
+      if (config.discord && config.discord.events.disconnect && normalizedReason !== 'Periodic Rejoin') {
+        sendDiscordWebhook(`[-] **Disconnected**: ${normalizedReason || 'Unknown'}`, 0xf87171); // Red
+      }
+
+      if (isBanLikeReason(normalizedReason)) {
+        pauseForBan(normalizedReason, 'end');
+        return;
+      }
+
+      if (botState.banPaused) {
+        console.log('[Bot] Reconnect paused because the server reported a ban/idle violation. Unban the bot and restart the service.');
+        return;
       }
 
       if (config.utils['auto-reconnect']) {
@@ -542,17 +626,23 @@ function createBot() {
     bot.on('kicked', (reason) => {
       if (attemptId !== currentConnectAttempt) return;
       clearConnectionTimeout();
-      console.log(`[Bot] Kicked: ${reason}`);
+      const normalizedReason = normalizeReason(reason);
+      console.log(`[Bot] Kicked: ${normalizedReason}`);
       botState.connected = false;
-      botState.errors.push({ type: 'kicked', reason, time: Date.now() });
+      botState.errors.push({ type: 'kicked', reason: normalizedReason, time: Date.now() });
       clearAllIntervals();
 
       if (config.discord && config.discord.events.disconnect) {
-        sendDiscordWebhook(`[!] **Kicked**: ${reason}`, 0xff0000); // Bright Red
+        sendDiscordWebhook(`[!] **Kicked**: ${normalizedReason}`, 0xff0000); // Bright Red
+      }
+
+      if (isBanLikeReason(normalizedReason)) {
+        pauseForBan(normalizedReason, 'kicked');
+        return;
       }
 
       if (config.utils['auto-reconnect']) {
-        const duplicateLogin = String(reason).includes('The same username is already playing on the server!');
+        const duplicateLogin = normalizedReason.includes('The same username is already playing on the server!');
         scheduleReconnect(duplicateLogin ? 'duplicate-login' : 'kicked');
       }
     });
@@ -591,15 +681,12 @@ function createBot() {
 }
 
 function scheduleReconnect(reason = 'generic') {
-  if (reconnectTimeout) {
-    clearTimeout(reconnectTimeout);
-    reconnectTimeout = null;
-  }
-
-  if (isReconnecting) {
+  if (botState.banPaused) {
+    console.log('[Bot] Reconnect skipped because bot is paused after a ban/idle kick.');
     return;
   }
 
+  clearReconnectState();
   isReconnecting = true;
   botState.reconnectAttempts++;
 
@@ -607,8 +694,7 @@ function scheduleReconnect(reason = 'generic') {
   console.log(`[Bot] Reconnecting in ${delay / 1000}s (attempt #${botState.reconnectAttempts}, reason: ${reason})`);
 
   reconnectTimeout = setTimeout(() => {
-    isReconnecting = false;
-    reconnectTimeout = null;
+    clearReconnectState();
     createBot();
   }, delay);
 }
