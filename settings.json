@@ -1,7 +1,7 @@
 {
   "name": "AFK Bot",
   "bot-account": {
-    "username": "Testing",
+    "username": "Technoblade",
     "password": "",
     "type": "offline"
   },
@@ -45,8 +45,8 @@
     "periodic-rejoin-reconnect-delay": 18000,
     "periodic-rejoin": {
       "enabled": true,
-      "min-interval": 300,
-      "max-interval": 600
+      "min-interval": 600,
+      "max-interval": 1200
     }
   },
   "movement": {
