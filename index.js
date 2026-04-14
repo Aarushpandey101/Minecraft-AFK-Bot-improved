@@ -95,13 +95,39 @@ app.get('/', (req, res) => {
             100% { opacity: 1; transform: scale(1); }
           }
           .btn-guide {
-            display: inline-block; margin-top: 20px; padding: 12px 24px; 
-            background: #2dd4bf; color: #0f172a; text-decoration: none; 
-            border-radius: 8px; font-weight: bold; 
-            box-shadow: 0 0 15px rgba(45, 212, 191, 0.4);
-            transition: transform 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 22px;
+            background: #2dd4bf;
+            color: #0f172a;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 700;
+            box-shadow: 0 0 15px rgba(45, 212, 191, 0.35);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+            border: none;
+            cursor: pointer;
+            min-width: 150px;
           }
-          .btn-guide:hover { transform: translateY(-2px); }
+          .btn-guide:hover { transform: translateY(-2px); filter: brightness(1.05); box-shadow: 0 0 22px rgba(45, 212, 191, 0.5); }
+          .btn-secondary {
+            background: rgba(15, 23, 42, 0.92);
+            color: #67e8f9;
+            border: 1px solid rgba(45, 212, 191, 0.35);
+            box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+          }
+          .btn-secondary:hover {
+            background: rgba(15, 23, 42, 1);
+            box-shadow: 0 0 16px rgba(103, 232, 249, 0.2);
+          }
+          .action-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 20px;
+            margin-bottom: 6px;
+          }
           .connection-bar {
             height: 4px; background: #334155; width: 100%; margin-top: 20px; border-radius: 2px; overflow: hidden;
           }
@@ -158,8 +184,10 @@ app.get('/', (req, res) => {
             <div class="value">${config.server.ip}</div>
           </div>
 
-          <a href="/tutorial" class="btn-guide">View Setup Guide</a>
-          <button id="restart-btn" class="btn-guide" style="border: none; cursor: pointer; margin-left: 10px;">Restart Bot</button>
+          <div class="action-row">
+            <a href="/tutorial" class="btn-guide">View Setup Guide</a>
+            <button id="restart-btn" class="btn-guide btn-secondary">Restart Bot</button>
+          </div>
           
           <div class="connection-bar">
             <div class="connection-fill" id="activity-bar"></div>
