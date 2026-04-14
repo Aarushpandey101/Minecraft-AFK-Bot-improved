@@ -41,7 +41,7 @@
     "auto-reconnect-delay": 4000,
     "max-reconnect-delay": 12000,
     "network-reconnect-delay": 3000,
-    "duplicate-login-reconnect-delay": 18000,
+    "duplicate-login-reconnect-delay": 30000,
     "periodic-rejoin-reconnect-delay": 18000,
     "periodic-rejoin": {
       "enabled": true,
@@ -90,6 +90,9 @@
       "ban": true,
       "chat": false
     }
+  },
+  "dashboard": {
+    "restartKey": "Restart"
   },
   "chat": {
     "respond": true

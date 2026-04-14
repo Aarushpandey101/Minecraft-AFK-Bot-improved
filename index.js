@@ -159,6 +159,7 @@ app.get('/', (req, res) => {
           </div>
 
           <a href="/tutorial" class="btn-guide">View Setup Guide</a>
+          <button id="restart-btn" class="btn-guide" style="border: none; cursor: pointer; margin-left: 10px;">Restart Bot</button>
           
           <div class="connection-bar">
             <div class="connection-fill" id="activity-bar"></div>
@@ -236,6 +237,20 @@ app.get('/', (req, res) => {
               document.getElementById('live-indicator').style.color = '#64748b'; // Grey
             }
           };
+
+          const restartBtn = document.getElementById('restart-btn');
+          restartBtn.addEventListener('click', async () => {
+            if (!confirm('Restart the bot now?')) return;
+            const key = prompt('Enter the dashboard restart key:');
+            if (!key) return;
+            try {
+              const res = await fetch('/restart?key=' + encodeURIComponent(key), { method: 'POST' });
+              const data = await res.json();
+              alert(data.message || 'Restart requested.');
+            } catch (err) {
+              alert('Restart failed: ' + err.message);
+            }
+          });
 
           // Poll every 1 second
           setInterval(updateStats, 1000);
@@ -328,6 +343,22 @@ app.get('/health', (req, res) => {
 });
 
 app.get('/ping', (req, res) => res.send('pong'));
+
+app.post('/restart', (req, res) => {
+  const key = String(req.query.key || '');
+  const expectedKey = config.dashboard?.restartKey || '';
+
+  if (!expectedKey || key !== expectedKey) {
+    return res.status(403).json({ ok: false, message: 'Invalid restart key.' });
+  }
+
+  if (isShuttingDown) {
+    return res.json({ ok: true, message: 'Restart already in progress.' });
+  }
+
+  res.json({ ok: true, message: 'Restarting bot now...' });
+  setTimeout(() => beginShutdown(0, 'dashboard-restart'), 1000);
+});
 
 app.listen(HTTP_PORT, '0.0.0.0', () => {
   console.log(`[Server] HTTP server started on port ${HTTP_PORT}`);
@@ -1194,21 +1225,25 @@ process.on('unhandledRejection', (reason, promise) => {
   // Do not exit.
 });
 
-// Graceful shutdown from external signals (still allowed to exit if system demands it)
-process.on('SIGTERM', () => {
-  console.log('[System] SIGTERM received. Starting graceful shutdown so the server session can close cleanly...');
+function beginShutdown(exitCode = 0, source = 'requested') {
+  if (isShuttingDown) return;
+  console.log(`[System] Shutdown requested from ${source}. Starting graceful shutdown...`);
   isShuttingDown = true;
   botState.connected = false;
   destroyCurrentBot();
   clearAllIntervals();
   clearReconnectState();
-  setTimeout(() => process.exit(0), 3000);
+  setTimeout(() => process.exit(exitCode), 3000);
+}
+
+// Graceful shutdown from external signals (still allowed to exit if system demands it)
+process.on('SIGTERM', () => {
+  beginShutdown(0, 'SIGTERM');
 });
 
 process.on('SIGINT', () => {
   // Local Ctrl+C
-  console.log('[System] Manual stop requested. Exiting...');
-  process.exit(0);
+  beginShutdown(0, 'SIGINT');
 });
 
 // ============================================================
