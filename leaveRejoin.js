@@ -81,7 +81,7 @@ function setupLeaveRejoin(bot, createBot, markIntentionalLeave) {
         stopped = false
 
         // Stay connected long enough to look normal without creating big empty windows.
-        const stayTime = randomMs(180000, 420000)
+        const stayTime = randomMs(600000, 1200000)
 
         logThrottled(`[AFK] Will leave in ${Math.round(stayTime / 1000)} seconds`)
 
