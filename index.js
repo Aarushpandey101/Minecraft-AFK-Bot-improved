@@ -25,7 +25,9 @@ let botState = {
   lastSpawnAt: null,
   errors: [],
   banPaused: false,
-  banReason: null
+  banReason: null,
+  lastDisconnectReason: null,
+  lastDisconnectKind: null
 };
 
 // Health check endpoint for monitoring
@@ -127,13 +129,28 @@ app.get('/', (req, res) => {
           </div>
 
           <div class="stat-card">
+            <div class="label">Username</div>
+            <div class="value" id="username-text">${config['bot-account'].username}</div>
+          </div>
+
+          <div class="stat-card">
             <div class="label">Uptime</div>
             <div class="value" id="uptime-text">0h 0m 0s</div>
           </div>
 
           <div class="stat-card">
+            <div class="label">Session Uptime</div>
+            <div class="value" id="session-uptime-text">0h 0m 0s</div>
+          </div>
+
+          <div class="stat-card">
             <div class="label">Coordinates</div>
             <div class="value" id="coords-text">Waiting...</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="label">Last Disconnect</div>
+            <div class="value" id="disconnect-text">None</div>
           </div>
 
           <div class="stat-card">
@@ -166,8 +183,11 @@ app.get('/', (req, res) => {
               const data = await res.json();
               
               const statusText = document.getElementById('status-text');
+              const usernameText = document.getElementById('username-text');
               const uptimeText = document.getElementById('uptime-text');
+              const sessionUptimeText = document.getElementById('session-uptime-text');
               const coordsText = document.getElementById('coords-text');
+              const disconnectText = document.getElementById('disconnect-text');
               const liveDot = document.getElementById('live-indicator');
               const container = document.getElementById('main-container');
 
@@ -190,13 +210,25 @@ app.get('/', (req, res) => {
               }
 
               // Update Uptime
+              if (data.username) {
+                usernameText.innerText = data.username;
+              }
               uptimeText.innerText = formatUptime(data.uptime);
+              sessionUptimeText.innerText = formatUptime(data.sessionUptime || 0);
 
               // Update Coords
               if (data.coords) {
                 coordsText.innerText = \`Coords: \${Math.floor(data.coords.x)}, \${Math.floor(data.coords.y)}, \${Math.floor(data.coords.z)}\`;
               } else {
                 coordsText.innerText = 'Unknown Location';
+              }
+
+              if (data.lastDisconnectKind && data.lastDisconnectReason) {
+                disconnectText.innerText = \`\${data.lastDisconnectKind}: \${data.lastDisconnectReason}\`;
+              } else if (data.lastDisconnectReason) {
+                disconnectText.innerText = data.lastDisconnectReason;
+              } else {
+                disconnectText.innerText = 'None';
               }
 
             } catch (e) {
@@ -258,7 +290,13 @@ app.get('/tutorial', (req, res) => {
             <li>Go to <a href="https://render.com" target="_blank">Render.com</a> and create a Web Service.</li>
             <li>Connect your GitHub.</li>
             <li>Build Command: <code>npm install</code></li>
-            <li>Start Command: <code>npm start</code></li>
+            <li>Start Command: <code>npm start</code> (this runs <code>node index.js</code> from <code>package.json</code>)</li>
+            <li>Current Render bot username: <code>Testing</code>.</li>
+            <li>If you want <strong>spectator mode</strong>, make the bot <strong>OP</strong> on Aternos so the command can work.</li>
+            <li><strong>Important:</strong> The bot entry file is <code>index.js</code>, but the launch command is <code>npm start</code>.</li>
+            <li><strong>Current stay window:</strong> the bot intentionally leaves roughly every <code>10-20 minutes</code> on this Render copy.</li>
+            <li><strong>Current alerts:</strong> ban/idle-kick alerts ping the Discord user ID and pause reconnects until you restart after unban.</li>
+            <li><strong>Current status page:</strong> shows process uptime, session uptime, and the last disconnect reason.</li>
             <li><strong>Magic:</strong> The bot automatically pings itself to stay awake!</li>
           </ol>
         </div>
@@ -274,6 +312,7 @@ app.get('/health', (req, res) => {
     ? Math.floor((Date.now() - botState.lastSpawnAt) / 1000)
     : 0;
   res.json({
+    username: config['bot-account'].username,
     status: botState.banPaused ? 'paused-banned' : (botState.connected ? 'connected' : 'disconnected'),
     uptime: Math.floor((Date.now() - botState.startTime) / 1000),
     sessionUptime,
@@ -282,7 +321,9 @@ app.get('/health', (req, res) => {
     lastActivity: botState.lastActivity,
     reconnectAttempts: botState.reconnectAttempts,
     memoryUsage: process.memoryUsage().heapUsed / 1024 / 1024,
-    banReason: botState.banReason
+    banReason: botState.banReason,
+    lastDisconnectReason: botState.lastDisconnectReason,
+    lastDisconnectKind: botState.lastDisconnectKind
   });
 });
 
@@ -318,6 +359,41 @@ function normalizeReason(reason) {
 function cleanBanReason(reasonText) {
   const text = normalizeReason(reasonText);
   return text.replace(/Reason:\s*null/gi, 'Reason: No specific reason provided');
+}
+
+function classifyDisconnectReason(reasonText) {
+  const text = normalizeReason(reasonText);
+  const lower = text.toLowerCase();
+
+  if (lower.includes('this server is offline')) {
+    return {
+      kind: 'server-offline',
+      label: 'Server offline',
+      note: 'Aternos reported that the server is offline or stopping.'
+    };
+  }
+
+  if (lower.includes('this server is online') && lower.includes('please reconnect to join')) {
+    return {
+      kind: 'reconnect-prompt',
+      label: 'Reconnect prompt',
+      note: 'Aternos asked the bot to reconnect. This usually means the session was reset or the join handoff dropped.'
+    };
+  }
+
+  if (lower.includes('please reconnect to join')) {
+    return {
+      kind: 'reconnect-prompt',
+      label: 'Reconnect prompt',
+      note: 'Aternos asked the bot to reconnect.'
+    };
+  }
+
+  return {
+    kind: 'generic',
+    label: 'Disconnect',
+    note: text
+  };
 }
 
 function isBanLikeReason(reason) {
@@ -401,6 +477,7 @@ let isReconnecting = false;
 let connectionTimeout = null;
 let currentConnectAttempt = 0;
 let intentionalLeaveInProgress = false;
+let isShuttingDown = false;
 
 function clearAllIntervals() {
   console.log(`[Cleanup] Clearing ${activeIntervals.length} intervals`);
@@ -473,6 +550,11 @@ function getReconnectDelay(reason = 'generic') {
 }
 
 function createBot() {
+  if (isShuttingDown) {
+    console.log('[Bot] Bot creation skipped because the process is shutting down.');
+    return;
+  }
+
   if (botState.banPaused) {
     console.log('[Bot] Bot creation skipped because service is paused after a ban/idle kick.');
     return;
@@ -571,21 +653,21 @@ function createBot() {
         }
       }, 3000);
 
-      // Attempt creative mode (only works if bot has OP)
+      // Attempt spectator mode (only works if bot has OP)
       setTimeout(() => {
         if (bot && botState.connected) {
-          bot.chat('/gamemode creative');
-          console.log('[INFO] Attempted to set creative mode (requires OP)');
+          bot.chat('/gamemode spectator');
+          console.log('[INFO] Attempted to set spectator mode (requires OP)');
         }
       }, 3000);
 
       bot.on('messagestr', (message) => {
         if (
           message.includes('commands.gamemode.success.self') ||
-          message.includes('Set own game mode to Creative Mode')
+          message.includes('Set own game mode to Spectator Mode')
         ) {
-          console.log('[INFO] Bot is now in Creative Mode.');
-           
+          console.log('[INFO] Bot is now in Spectator Mode.');
+          
           bot.chat('/gamerule sendCommandFeedback false');
           
         }
@@ -599,7 +681,13 @@ function createBot() {
       if (attemptId !== currentConnectAttempt) return;
       clearConnectionTimeout();
       const normalizedReason = normalizeReason(reason);
+      const disconnectInfo = classifyDisconnectReason(normalizedReason);
+      botState.lastDisconnectReason = cleanBanReason(normalizedReason);
+      botState.lastDisconnectKind = disconnectInfo.kind;
       console.log(`[Bot] Disconnected: ${normalizedReason || 'Unknown reason'}`);
+      if (disconnectInfo.kind === 'server-offline' || disconnectInfo.kind === 'reconnect-prompt') {
+        console.log(`[Bot] ${disconnectInfo.label}: ${disconnectInfo.note}`);
+      }
       botState.connected = false;
       clearAllIntervals();
 
@@ -627,7 +715,13 @@ function createBot() {
       if (attemptId !== currentConnectAttempt) return;
       clearConnectionTimeout();
       const normalizedReason = normalizeReason(reason);
+      const disconnectInfo = classifyDisconnectReason(normalizedReason);
+      botState.lastDisconnectReason = cleanBanReason(normalizedReason);
+      botState.lastDisconnectKind = disconnectInfo.kind;
       console.log(`[Bot] Kicked: ${normalizedReason}`);
+      if (disconnectInfo.kind === 'server-offline' || disconnectInfo.kind === 'reconnect-prompt') {
+        console.log(`[Bot] ${disconnectInfo.label}: ${disconnectInfo.note}`);
+      }
       botState.connected = false;
       botState.errors.push({ type: 'kicked', reason: normalizedReason, time: Date.now() });
       clearAllIntervals();
@@ -681,6 +775,11 @@ function createBot() {
 }
 
 function scheduleReconnect(reason = 'generic') {
+  if (isShuttingDown) {
+    console.log('[Bot] Reconnect skipped because the process is shutting down.');
+    return;
+  }
+
   if (botState.banPaused) {
     console.log('[Bot] Reconnect skipped because bot is paused after a ban/idle kick.');
     return;
@@ -1097,11 +1196,13 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Graceful shutdown from external signals (still allowed to exit if system demands it)
 process.on('SIGTERM', () => {
-  console.log('[System] SIGTERM received. Ignoring to stay alive? (Render might force kill)');
-  // If we mistakenly exit here, the web server dies. 
-  // User asked for "all the time on no matter what".
-  // Note: Render will SIGKILL if we don't exit, but this keeps us up as long as possible.
-  process.exit(0);
+  console.log('[System] SIGTERM received. Starting graceful shutdown so the server session can close cleanly...');
+  isShuttingDown = true;
+  botState.connected = false;
+  destroyCurrentBot();
+  clearAllIntervals();
+  clearReconnectState();
+  setTimeout(() => process.exit(0), 3000);
 });
 
 process.on('SIGINT', () => {
@@ -1116,6 +1217,7 @@ process.on('SIGINT', () => {
 console.log('='.repeat(50));
 console.log('  Minecraft AFK Bot v2.3 - Bug Fix Edition');
 console.log('='.repeat(50));
+console.log(`Account: ${config['bot-account'].username}`);
 console.log(`Server: ${config.server.ip}:${config.server.port}`);
 console.log(`Version: ${config.server.version}`);
 console.log(`Auto-Reconnect: ${config.utils['auto-reconnect'] ? 'Enabled' : 'Disabled'}`);
