@@ -23,6 +23,7 @@ let botState = {
   reconnectAttempts: 0,
   startTime: Date.now(),
   lastSpawnAt: null,
+  nextLeaveAt: null,
   errors: [],
   banPaused: false,
   banReason: null,
@@ -170,6 +171,11 @@ app.get('/', (req, res) => {
           </div>
 
           <div class="stat-card">
+            <div class="label">Next Leave</div>
+            <div class="value" id="leave-timer-text">Waiting...</div>
+          </div>
+
+          <div class="stat-card">
             <div class="label">Coordinates</div>
             <div class="value" id="coords-text">Waiting...</div>
           </div>
@@ -187,6 +193,7 @@ app.get('/', (req, res) => {
           <div class="action-row">
             <a href="/tutorial" class="btn-guide">View Setup Guide</a>
             <button id="restart-btn" class="btn-guide btn-secondary">Restart Bot</button>
+            <button id="test-webhook-btn" class="btn-guide btn-secondary">Test Webhook</button>
           </div>
           
           <div class="connection-bar">
@@ -215,6 +222,7 @@ app.get('/', (req, res) => {
               const usernameText = document.getElementById('username-text');
               const uptimeText = document.getElementById('uptime-text');
               const sessionUptimeText = document.getElementById('session-uptime-text');
+              const leaveTimerText = document.getElementById('leave-timer-text');
               const coordsText = document.getElementById('coords-text');
               const disconnectText = document.getElementById('disconnect-text');
               const liveDot = document.getElementById('live-indicator');
@@ -244,6 +252,12 @@ app.get('/', (req, res) => {
               }
               uptimeText.innerText = formatUptime(data.uptime);
               sessionUptimeText.innerText = formatUptime(data.sessionUptime || 0);
+              if (data.nextLeaveAt) {
+                const remaining = Math.max(0, Math.floor((new Date(data.nextLeaveAt).getTime() - Date.now()) / 1000));
+                leaveTimerText.innerText = remaining > 0 ? formatUptime(remaining) : 'Leaving now...';
+              } else {
+                leaveTimerText.innerText = 'Waiting...';
+              }
 
               // Update Coords
               if (data.coords) {
@@ -277,6 +291,20 @@ app.get('/', (req, res) => {
               alert(data.message || 'Restart requested.');
             } catch (err) {
               alert('Restart failed: ' + err.message);
+            }
+          });
+
+          const testWebhookBtn = document.getElementById('test-webhook-btn');
+          testWebhookBtn.addEventListener('click', async () => {
+            if (!confirm('Send a test Discord webhook message?')) return;
+            const key = prompt('Enter the dashboard restart key to authorize the test:');
+            if (!key) return;
+            try {
+              const res = await fetch('/webhook-test?key=' + encodeURIComponent(key), { method: 'POST' });
+              const data = await res.json();
+              alert(data.message || 'Webhook test requested.');
+            } catch (err) {
+              alert('Webhook test failed: ' + err.message);
             }
           });
 
@@ -360,6 +388,7 @@ app.get('/health', (req, res) => {
     uptime: Math.floor((Date.now() - botState.startTime) / 1000),
     sessionUptime,
     lastSpawnAt: botState.lastSpawnAt ? new Date(botState.lastSpawnAt).toISOString() : null,
+    nextLeaveAt: botState.nextLeaveAt ? new Date(botState.nextLeaveAt).toISOString() : null,
     coords: (bot && bot.entity) ? bot.entity.position : null,
     lastActivity: botState.lastActivity,
     reconnectAttempts: botState.reconnectAttempts,
@@ -386,6 +415,27 @@ app.post('/restart', (req, res) => {
 
   res.json({ ok: true, message: 'Restarting bot now...' });
   setTimeout(() => beginShutdown(0, 'dashboard-restart'), 1000);
+});
+
+app.post('/webhook-test', (req, res) => {
+  const key = String(req.query.key || '');
+  const expectedKey = config.dashboard?.restartKey || '';
+
+  if (!expectedKey || key !== expectedKey) {
+    return res.status(403).json({ ok: false, message: 'Invalid authorization key.' });
+  }
+
+  if (!config.discord || !config.discord.enabled || !config.discord.webhookUrl || config.discord.webhookUrl.includes('YOUR_DISCORD')) {
+    return res.status(400).json({ ok: false, message: 'Discord webhook is not configured.' });
+  }
+
+  const mention = config.discord.userMentionId ? `<@${config.discord.userMentionId}> ` : '';
+  sendDiscordWebhook(
+    `${mention}[WEBHOOK TEST] This is a test message from the dashboard.\nNo action is needed. Please ignore this alert.`,
+    0x38bdf8
+  );
+
+  res.json({ ok: true, message: 'Webhook test sent.' });
 });
 
 app.listen(HTTP_PORT, '0.0.0.0', () => {
@@ -742,7 +792,9 @@ function createBot() {
       initializeModules(bot, mcData, defaultMove);
 
       // Setup enhanced Leave/Rejoin logic
-      setupLeaveRejoin(bot, createBot, markIntentionalLeave);
+      setupLeaveRejoin(bot, createBot, markIntentionalLeave, (nextLeaveAt) => {
+        botState.nextLeaveAt = nextLeaveAt;
+      });
 
       setTimeout(() => {
         if (bot && botState.connected) {
@@ -1262,11 +1314,18 @@ function sendDiscordWebhook(content, color = 0x0099ff) {
 
   const protocol = config.discord.webhookUrl.startsWith('https') ? https : http;
   const urlParts = new URL(config.discord.webhookUrl);
+  const mentionMatch = content.match(/<@!?(\d+)>/);
+  const mentionId = mentionMatch ? mentionMatch[1] : null;
+  const embedDescription = content.replace(/<@!?(\d+)>\s*/g, '').trim();
 
   const payload = JSON.stringify({
     username: config.name,
+    content: mentionId ? `<@${mentionId}>` : undefined,
+    allowed_mentions: mentionId
+      ? { parse: [], users: [mentionId], roles: [], replied_user: false }
+      : { parse: [], replied_user: false },
     embeds: [{
-      description: content,
+      description: embedDescription,
       color: color,
       timestamp: new Date().toISOString(),
       footer: { text: 'Slobos AFK Bot' }

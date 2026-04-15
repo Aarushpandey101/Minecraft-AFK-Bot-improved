@@ -2,7 +2,7 @@ function randomMs(minMs, maxMs) {
     return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs
 }
 
-function setupLeaveRejoin(bot, createBot, markIntentionalLeave) {
+function setupLeaveRejoin(bot, createBot, markIntentionalLeave, setNextLeaveAt) {
     // Timers
     let leaveTimer = null
     let jumpTimer = null
@@ -24,6 +24,9 @@ function setupLeaveRejoin(bot, createBot, markIntentionalLeave) {
 
     function cleanup() {
         stopped = true
+        if (typeof setNextLeaveAt === 'function') {
+            setNextLeaveAt(null)
+        }
         if (leaveTimer) clearTimeout(leaveTimer)
         if (jumpTimer) clearTimeout(jumpTimer)
         if (jumpOffTimer) clearTimeout(jumpOffTimer)
@@ -82,6 +85,10 @@ function setupLeaveRejoin(bot, createBot, markIntentionalLeave) {
 
         // Stay connected long enough to look normal without creating big empty windows.
         const stayTime = randomMs(600000, 1200000)
+        const leaveAt = Date.now() + stayTime
+        if (typeof setNextLeaveAt === 'function') {
+            setNextLeaveAt(leaveAt)
+        }
 
         logThrottled(`[AFK] Will leave in ${Math.round(stayTime / 1000)} seconds`)
 
