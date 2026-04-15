@@ -405,9 +405,47 @@ function normalizeReason(reason) {
   if (typeof reason === 'number' || typeof reason === 'boolean') return String(reason);
   try {
     if (typeof reason === 'object') {
-      if (typeof reason.text === 'string' && reason.text.trim()) return reason.text;
-      if (typeof reason.reason === 'string' && reason.reason.trim()) return reason.reason;
-      if (typeof reason.message === 'string' && reason.message.trim()) return reason.message;
+      const parts = [];
+      const visited = new Set();
+
+      const walk = (value) => {
+        if (value == null) return;
+        if (typeof value === 'string') {
+          const text = value.trim();
+          if (text) parts.push(text);
+          return;
+        }
+        if (typeof value === 'number' || typeof value === 'boolean') {
+          parts.push(String(value));
+          return;
+        }
+        if (typeof value !== 'object' || visited.has(value)) return;
+        visited.add(value);
+
+        if (Array.isArray(value)) {
+          value.forEach(walk);
+          return;
+        }
+
+        if (typeof value.text === 'string' && value.text.trim()) parts.push(value.text.trim());
+        if (typeof value.reason === 'string' && value.reason.trim()) parts.push(value.reason.trim());
+        if (typeof value.message === 'string' && value.message.trim()) parts.push(value.message.trim());
+
+        ['extra', 'with', 'contents'].forEach((key) => {
+          if (value[key] != null) walk(value[key]);
+        });
+      };
+
+      walk(reason);
+
+      const flattened = parts
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .replace(/\s+\n\s+/g, '\n')
+        .replace(/\n\s+/g, '\n')
+        .trim();
+
+      if (flattened) return flattened;
     }
     return JSON.stringify(reason);
   } catch {
@@ -462,7 +500,7 @@ function isBanLikeReason(reason) {
     text.includes('banned from this server') ||
     text.includes('ban from this server') ||
     text.includes('temporarily banned') ||
-    text.includes('idle for too long') ||
+    // NOTE: 'idle for too long' is NOT treated as a ban - it's just a kick, bot will reconnect normally
     text.includes('violates our terms of service')
   );
 }
@@ -708,15 +746,14 @@ function createBot() {
 
       setTimeout(() => {
         if (bot && botState.connected) {
-          bot.chat('/gamerule sendCommandFeedback false');
-        }
-      }, 3000);
-
-      // Attempt spectator mode (only works if bot has OP)
-      setTimeout(() => {
-        if (bot && botState.connected) {
+          // Chain commands with a gap so they don't race
           bot.chat('/gamemode spectator');
           console.log('[INFO] Attempted to set spectator mode (requires OP)');
+          setTimeout(() => {
+            if (bot && botState.connected) {
+              bot.chat('/gamerule sendCommandFeedback false');
+            }
+          }, 1500);
         }
       }, 3000);
 
@@ -877,21 +914,28 @@ function initializeModules(bot, mcData, defaultMove) {
     }, 1000);
   }
 
-  // ---------- CHAT MESSAGES ----------
+  // ---------- CHAT MESSAGES (Human-like: rare, random timing) ----------
   if (config.utils['chat-messages'].enabled) {
     const messages = config.utils['chat-messages'].messages;
     if (config.utils['chat-messages'].repeat) {
-      let i = 0;
-      addInterval(() => {
-        if (bot && botState.connected) {
-          bot.chat(messages[i]);
-          botState.lastActivity = Date.now();
-          i = (i + 1) % messages.length;
-        }
-      }, config.utils['chat-messages']['repeat-delay'] * 1000);
+      // Send one random message every 15-30 minutes (not sequential, not fast)
+      function scheduleNextChatMessage() {
+        const delay = 15 * 60 * 1000 + Math.random() * 15 * 60 * 1000; // 15-30 min
+        setTimeout(() => {
+          if (bot && botState.connected) {
+            const msg = messages[Math.floor(Math.random() * messages.length)];
+            bot.chat(msg);
+            botState.lastActivity = Date.now();
+          }
+          scheduleNextChatMessage();
+        }, delay);
+      }
+      scheduleNextChatMessage();
     } else {
       messages.forEach((msg, idx) => {
-        setTimeout(() => bot.chat(msg), idx * 1000);
+        setTimeout(() => {
+          if (bot && botState.connected) bot.chat(msg);
+        }, idx * 3000);
       });
     }
   }
@@ -902,20 +946,40 @@ function initializeModules(bot, mcData, defaultMove) {
     bot.pathfinder.setGoal(new GoalBlock(config.position.x, config.position.y, config.position.z));
   }
 
-  // ---------- ANTI-AFK (Simple) ----------
+  // ---------- ANTI-AFK (Human-like) ----------
   if (config.utils['anti-afk'].enabled) {
-    addInterval(() => {
-      if (bot && botState.connected) {
-        bot.setControlState('jump', true);
-        setTimeout(() => {
-          if (bot) bot.setControlState('jump', false);
-        }, 100);
-        botState.lastActivity = Date.now();
-      }
-    }, 3000); // Jump every 30 seconds
+    // Randomized jump every 25-45 seconds (not a fixed pattern)
+    function scheduleAntiAfkJump() {
+      const delay = 25000 + Math.random() * 20000; // 25s to 45s
+      setTimeout(() => {
+        if (bot && botState.connected) {
+          bot.setControlState('jump', true);
+          setTimeout(() => {
+            if (bot) bot.setControlState('jump', false);
+          }, 100 + Math.random() * 150);
+          botState.lastActivity = Date.now();
+        }
+        scheduleAntiAfkJump();
+      }, delay);
+    }
+    scheduleAntiAfkJump();
 
+    // Randomized sneak toggles - humans don't hold sneak forever
     if (config.utils['anti-afk'].sneak) {
-      bot.setControlState('sneak', true);
+      function scheduleSneak() {
+        const waitBeforeSneak = 30000 + Math.random() * 60000; // wait 30-90s
+        setTimeout(() => {
+          if (bot && botState.connected) {
+            bot.setControlState('sneak', true);
+            const sneakDuration = 500 + Math.random() * 2500; // sneak 0.5-3s
+            setTimeout(() => {
+              if (bot) bot.setControlState('sneak', false);
+            }, sneakDuration);
+          }
+          scheduleSneak();
+        }, waitBeforeSneak);
+      }
+      scheduleSneak();
     }
   }
 
@@ -958,23 +1022,37 @@ function periodicRejoin(bot) {
 // ============================================================
 function startCircleWalk(bot, defaultMove) {
   const radius = config.movement['circle-walk'].radius;
-  let angle = 0;
+  let angle = Math.random() * Math.PI * 2; // start at random angle
   let lastPathTime = 0;
+  let idleUntil = 0; // timestamp until which the bot "idles" doing nothing
 
   addInterval(() => {
     if (!bot || !botState.connected) return;
 
-    // Rate limit pathfinding
     const now = Date.now();
+
+    // Occasionally do nothing for 2-5 minutes (humans stand still sometimes)
+    if (now < idleUntil) return;
+
+    // Rate limit pathfinding
     if (now - lastPathTime < 2000) return;
     lastPathTime = now;
+
+    // 5% chance to start a random idle period
+    if (Math.random() < 0.05) {
+      const idleDuration = 2 * 60 * 1000 + Math.random() * 3 * 60 * 1000; // 2-5 min
+      idleUntil = now + idleDuration;
+      console.log(`[CircleWalk] Idling for ${Math.round(idleDuration / 1000)}s (human behaviour)`);
+      return;
+    }
 
     try {
       const x = bot.entity.position.x + Math.cos(angle) * radius;
       const z = bot.entity.position.z + Math.sin(angle) * radius;
       bot.pathfinder.setMovements(defaultMove);
       bot.pathfinder.setGoal(new GoalBlock(Math.floor(x), Math.floor(bot.entity.position.y), Math.floor(z)));
-      angle += Math.PI / 4;
+      // Random angle step so circle isn't perfectly uniform
+      angle += (Math.PI / 4) + (Math.random() - 0.5) * (Math.PI / 8);
       botState.lastActivity = Date.now();
     } catch (e) {
       console.log('[CircleWalk] Error:', e.message);
@@ -983,32 +1061,45 @@ function startCircleWalk(bot, defaultMove) {
 }
 
 function startRandomJump(bot) {
-  addInterval(() => {
-    if (!bot || !botState.connected) return;
-    try {
-      bot.setControlState('jump', true);
-      setTimeout(() => {
-        if (bot) bot.setControlState('jump', false);
-      }, 300);
-      botState.lastActivity = Date.now();
-    } catch (e) {
-      console.log('[RandomJump] Error:', e.message);
-    }
-  }, config.movement['random-jump'].interval);
+  function scheduleNextJump() {
+    // Random interval 20-60 seconds
+    const delay = 20000 + Math.random() * 40000;
+    setTimeout(() => {
+      if (!bot || !botState.connected) { scheduleNextJump(); return; }
+      try {
+        bot.setControlState('jump', true);
+        setTimeout(() => {
+          if (bot) bot.setControlState('jump', false);
+        }, 200 + Math.random() * 200);
+        botState.lastActivity = Date.now();
+      } catch (e) {
+        console.log('[RandomJump] Error:', e.message);
+      }
+      scheduleNextJump();
+    }, delay);
+  }
+  scheduleNextJump();
 }
 
 function startLookAround(bot) {
-  addInterval(() => {
-    if (!bot || !botState.connected) return;
-    try {
-      const yaw = Math.random() * Math.PI * 2;
-      const pitch = (Math.random() - 0.5) * Math.PI / 4;
-      bot.look(yaw, pitch, true);
-      botState.lastActivity = Date.now();
-    } catch (e) {
-      console.log('[LookAround] Error:', e.message);
-    }
-  }, config.movement['look-around'].interval);
+  // Randomize look interval (not a fixed beat) - humans don't look around on a timer
+  function scheduleNextLook() {
+    const delay = 3000 + Math.random() * 9000; // 3-12 seconds
+    setTimeout(() => {
+      if (!bot || !botState.connected) { scheduleNextLook(); return; }
+      try {
+        const yaw = Math.random() * Math.PI * 2;
+        // Keep pitch realistic - humans mostly look horizontal or slightly down
+        const pitch = (Math.random() - 0.3) * Math.PI / 5;
+        bot.look(yaw, pitch, true);
+        botState.lastActivity = Date.now();
+      } catch (e) {
+        console.log('[LookAround] Error:', e.message);
+      }
+      scheduleNextLook();
+    }, delay);
+  }
+  scheduleNextLook();
 }
 
 // ============================================================
