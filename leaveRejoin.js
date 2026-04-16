@@ -2,6 +2,32 @@ function randomMs(minMs, maxMs) {
     return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs
 }
 
+function parseIntervalToMs(value, fallbackSeconds) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        // Backward compatible: numeric values are interpreted as seconds.
+        return Math.max(1000, Math.floor(value * 1000))
+    }
+
+    if (typeof value === 'string') {
+        const raw = value.trim().toLowerCase()
+        const match = raw.match(/^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/)
+
+        if (match) {
+            const amount = Number(match[1])
+            const unit = match[2] || 's'
+            const multipliers = {
+                ms: 1,
+                s: 1000,
+                m: 60 * 1000,
+                h: 60 * 60 * 1000
+            }
+            return Math.max(1000, Math.floor(amount * multipliers[unit]))
+        }
+    }
+
+    return Math.max(1000, Math.floor(fallbackSeconds * 1000))
+}
+
 function setupLeaveRejoin(bot, createBot, markIntentionalLeave, setNextLeaveAt) {
     // Timers
     let leaveTimer = null
@@ -86,13 +112,17 @@ function setupLeaveRejoin(bot, createBot, markIntentionalLeave, setNextLeaveAt) 
         cleanup()
         stopped = false
 
-        // Read from settings.json periodic-rejoin (seconds → ms)
-        const minMs = (config.utils['periodic-rejoin']['min-interval'] || 3600) * 1000
-        const maxMs = (config.utils['periodic-rejoin']['max-interval'] || 7200) * 1000
-        const stayTime = randomMs(minMs, maxMs)
+        // Read from settings.json periodic-rejoin (number = seconds, string supports ms/s/m/h)
+        const periodicRejoin = config?.utils?.['periodic-rejoin'] || {}
+        const minMs = parseIntervalToMs(periodicRejoin['min-interval'], 3600)
+        const maxMs = parseIntervalToMs(periodicRejoin['max-interval'], 7200)
+        const safeMinMs = Math.min(minMs, maxMs)
+        const safeMaxMs = Math.max(minMs, maxMs)
+
+        const stayTime = randomMs(safeMinMs, safeMaxMs)
         const leaveAt = Date.now() + stayTime
         if (typeof setNextLeaveAt === 'function') {
-            setNextLeaveAt(leaveAt, { min: minMs, max: maxMs, stayTime })
+            setNextLeaveAt(leaveAt, { min: safeMinMs, max: safeMaxMs, stayTime })
         }
 
         logThrottled(`[AFK] Will leave in ${Math.round(stayTime / 1000)} seconds`)
