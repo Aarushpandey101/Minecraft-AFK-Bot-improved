@@ -18,6 +18,31 @@ const HTTP_PORT = Number(
 );
 
 // Bot state tracking
+function formatDurationCompact(totalSeconds) {
+  const seconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  if (m > 0) return `${m}m`;
+  return `${seconds}s`;
+}
+
+function getPeriodicWindowGuideText() {
+  const periodic = config?.utils?.['periodic-rejoin'] || {};
+  const minSeconds = Number(periodic['min-interval']);
+  const maxSeconds = Number(periodic['max-interval']);
+
+  if (!Number.isFinite(minSeconds) || !Number.isFinite(maxSeconds)) {
+    return 'configured in settings.json';
+  }
+
+  const safeMin = Math.min(minSeconds, maxSeconds);
+  const safeMax = Math.max(minSeconds, maxSeconds);
+  return `${formatDurationCompact(safeMin)}–${formatDurationCompact(safeMax)}`;
+}
+
 let botState = {
   connected: false,
   lastActivity: Date.now(),
@@ -390,6 +415,8 @@ app.get('/', (req, res) => {
 });
 
 app.get('/tutorial', (req, res) => {
+  const periodicWindowText = getPeriodicWindowGuideText();
+
   res.send(`
     <html>
       <head>
@@ -437,7 +464,8 @@ app.get('/tutorial', (req, res) => {
             <li>Current Render bot username: <code>Testing</code>.</li>
             <li>If you want <strong>spectator mode</strong>, make the bot <strong>OP</strong> on Aternos so the command can work.</li>
             <li><strong>Important:</strong> The bot entry file is <code>index.js</code>, but the launch command is <code>npm start</code>.</li>
-            <li><strong>Current stay window:</strong> the bot intentionally leaves roughly every <code>1–2 hours</code> (set by <code>min-interval</code> / <code>max-interval</code> in <code>settings.json</code>).</li>
+            <li><strong>Current stay window:</strong> the bot intentionally leaves roughly every <code>${periodicWindowText}</code>.</li>
+            <li><strong>Timer units:</strong> in <code>settings.json</code>, numeric <code>min-interval</code>/<code>max-interval</code> values are in <strong>seconds</strong> (e.g. <code>3600</code> = 1h, <code>7200</code> = 2h).</li>
             <li><strong>Current alerts:</strong> ban/idle-kick alerts ping the Discord user ID and pause reconnects until you restart after unban.</li>
             <li><strong>Current status page:</strong> shows process uptime, session uptime, and the last disconnect reason.</li>
             <li><strong>Magic:</strong> The bot automatically pings itself to stay awake!</li>
