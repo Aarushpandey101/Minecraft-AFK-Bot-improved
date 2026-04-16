@@ -34,283 +34,342 @@ let botState = {
 // Health check endpoint for monitoring
 // Health check endpoint for monitoring
 app.get('/', (req, res) => {
-  // "Blue Teal Shadow" Theme - Live Dashboard
   res.send(`
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
       <head>
-        <title>${config.name} Status</title>
+        <title>${config.name} — Dashboard</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
-          body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background: #0f172a; 
-            color: #f8fafc; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            height: 100vh; 
-            margin: 0; 
-            overflow: hidden;
+          *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+          :root {
+            --bg: #0b1120;
+            --surface: #131d2e;
+            --card: #1a2540;
+            --border: #243050;
+            --teal: #2dd4bf;
+            --teal-dim: rgba(45,212,191,0.12);
+            --teal-glow: rgba(45,212,191,0.35);
+            --green: #4ade80;
+            --red: #f87171;
+            --amber: #fbbf24;
+            --text: #e2e8f0;
+            --muted: #64748b;
+            --sub: #94a3b8;
           }
-          .container {
-            background: #1e293b;
-            padding: 40px;
-            border-radius: 20px;
-            box-shadow: 0 0 50px rgba(45, 212, 191, 0.2);
-            text-align: center;
-            width: 400px;
-            border: 1px solid #334155;
-            transition: box-shadow 0.3s ease;
+          body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 20px 16px 40px;
           }
-          h1 { margin-bottom: 30px; font-size: 24px; color: #ccfbf1; display: flex; align-items: center; justify-content: center; gap: 10px; }
-          .stat-card {
-            background: #0f172a;
-            padding: 15px;
-            margin: 15px 0;
-            border-radius: 12px;
-            border-left: 5px solid #2dd4bf;
-            text-align: left;
-            box-shadow: 5px 5px 15px rgba(0, 0, 0, 0.3);
-            position: relative;
-            overflow: hidden;
-          }
-          .label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
-          .value { font-size: 18px; font-weight: bold; color: #2dd4bf; text-shadow: 0 0 10px rgba(45, 212, 191, 0.5); margin-top: 5px; }
-          .status-dot { 
-            height: 12px; width: 12px; 
-            border-radius: 50%; 
-            display: inline-block; 
-            margin-right: 8px;
-            box-shadow: 0 0 10px currentColor;
-            transition: color 0.3s ease, box-shadow 0.3s ease;
-            background-color: currentColor; /* Use CSS for the dot color */
-          }
-          /* Override specific IDs to set background color for the dot */
-          #live-indicator { background-color: currentColor; }
-          
-          .pulse { animation: pulse 2s infinite; }
-          @keyframes pulse {
-            0% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(1.1); }
-            100% { opacity: 1; transform: scale(1); }
-          }
-          .btn-guide {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 12px 22px;
-            background: #2dd4bf;
-            color: #0f172a;
-            text-decoration: none;
-            border-radius: 10px;
-            font-weight: 700;
-            box-shadow: 0 0 15px rgba(45, 212, 191, 0.35);
-            transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
-            border: none;
-            cursor: pointer;
-            min-width: 150px;
-          }
-          .btn-guide:hover { transform: translateY(-2px); filter: brightness(1.05); box-shadow: 0 0 22px rgba(45, 212, 191, 0.5); }
-          .btn-secondary {
-            background: rgba(15, 23, 42, 0.92);
-            color: #67e8f9;
-            border: 1px solid rgba(45, 212, 191, 0.35);
-            box-shadow: 0 0 0 rgba(0, 0, 0, 0);
-          }
-          .btn-secondary:hover {
-            background: rgba(15, 23, 42, 1);
-            box-shadow: 0 0 16px rgba(103, 232, 249, 0.2);
-          }
-          .action-row {
+          header {
             display: flex;
+            align-items: center;
+            justify-content: space-between;
+            max-width: 560px;
+            margin: 0 auto 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+          }
+          .header-left { display: flex; align-items: center; gap: 12px; }
+          .bot-icon {
+            width: 42px; height: 42px; border-radius: 12px;
+            background: var(--teal-dim);
+            border: 1px solid var(--teal-glow);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
+          }
+          .bot-name { font-size: 20px; font-weight: 700; color: #fff; }
+          .bot-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+          .live-badge {
+            display: flex; align-items: center; gap: 6px;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 20px; padding: 5px 12px;
+            font-size: 12px; font-weight: 600; color: var(--sub);
+          }
+          .pulse-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--red);
+            animation: pulse 2s infinite;
+            transition: background 0.4s;
+          }
+          @keyframes pulse {
+            0%,100% { opacity:1; transform:scale(1); }
+            50% { opacity:0.5; transform:scale(1.3); }
+          }
+
+          /* STATUS BANNER */
+          .status-banner {
+            max-width: 560px; margin: 0 auto 20px;
+            border-radius: 14px; padding: 16px 20px;
+            display: flex; align-items: center; gap: 14px;
+            border: 1px solid var(--border);
+            background: var(--card);
+            transition: border-color 0.4s, box-shadow 0.4s;
+          }
+          .status-banner.online  { border-color: rgba(74,222,128,0.4); box-shadow: 0 0 24px rgba(74,222,128,0.1); }
+          .status-banner.banned  { border-color: rgba(251,191,36,0.4);  box-shadow: 0 0 24px rgba(251,191,36,0.1); }
+          .status-banner.offline { border-color: rgba(248,113,113,0.3); box-shadow: 0 0 24px rgba(248,113,113,0.08); }
+          .status-icon { font-size: 28px; flex-shrink: 0; }
+          .status-label { font-size: 17px; font-weight: 700; }
+          .status-detail { font-size: 12px; color: var(--sub); margin-top: 3px; }
+
+          /* GRID */
+          .grid {
+            max-width: 560px; margin: 0 auto 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
             gap: 12px;
-            flex-wrap: wrap;
-            margin-top: 20px;
-            margin-bottom: 6px;
           }
-          .connection-bar {
-            height: 4px; background: #334155; width: 100%; margin-top: 20px; border-radius: 2px; overflow: hidden;
+          .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px;
           }
-          .connection-fill {
-            height: 100%; width: 100%; background: #2dd4bf;
-            animation: loading 2s infinite linear;
-            transform-origin: 0% 50%;
+          .card.full { grid-column: 1 / -1; }
+          .card-label {
+            font-size: 10px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 1.2px;
+            color: var(--muted); margin-bottom: 8px;
           }
-          @keyframes loading {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
+          .card-value {
+            font-size: 20px; font-weight: 700; color: var(--teal);
+            word-break: break-word; line-height: 1.3;
+          }
+          .card-value.small { font-size: 14px; font-weight: 500; color: var(--sub); }
+          .card-value.warn  { color: var(--amber); }
+
+          /* SESSION BAR */
+          .session-bar-wrap { margin-top: 10px; }
+          .session-bar-bg { height: 4px; background: var(--border); border-radius: 4px; overflow: hidden; }
+          .session-bar-fill {
+            height: 100%; background: var(--teal);
+            border-radius: 4px;
+            animation: flow 2s linear infinite;
+            background-size: 200% 100%;
+            background-image: linear-gradient(90deg, var(--teal) 0%, #67e8f9 50%, var(--teal) 100%);
+          }
+          @keyframes flow { 0%{background-position:100% 0} 100%{background-position:-100% 0} }
+
+          /* BUTTONS */
+          .btn-row {
+            max-width: 560px; margin: 0 auto 12px;
+            display: flex; gap: 10px; flex-wrap: wrap;
+          }
+          .btn {
+            flex: 1; min-width: 120px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 14px; font-weight: 600;
+            border: none; cursor: pointer;
+            transition: transform 0.15s, filter 0.15s;
+            display: flex; align-items: center; justify-content: center; gap: 7px;
+          }
+          .btn:active { transform: scale(0.97); }
+          .btn-primary { background: var(--teal); color: #0b1120; }
+          .btn-primary:hover { filter: brightness(1.1); }
+          .btn-ghost {
+            background: var(--card); color: #67e8f9;
+            border: 1px solid var(--border);
+          }
+          .btn-ghost:hover { border-color: var(--teal); }
+          .btn-danger { background: rgba(248,113,113,0.15); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
+          .btn-danger:hover { background: rgba(248,113,113,0.25); }
+
+          footer {
+            text-align: center; color: var(--muted);
+            font-size: 11px; margin-top: 8px;
+            max-width: 560px; margin: 16px auto 0;
           }
         </style>
       </head>
       <body>
-        <div class="container" id="main-container">
-          <h1>
-            <span id="live-indicator" class="status-dot pulse" style="color: #ef4444;"></span> 
-            ${config.name}
-          </h1>
-          
-          <div class="stat-card">
-            <div class="label">Status</div>
-            <div class="value" id="status-text">Connecting...</div>
+        <header>
+          <div class="header-left">
+            <div class="bot-icon">🤖</div>
+            <div>
+              <div class="bot-name">${config.name}</div>
+              <div class="bot-sub">${config.server.ip}</div>
+            </div>
           </div>
+          <div class="live-badge">
+            <div class="pulse-dot" id="pulse-dot"></div>
+            <span id="live-label">Connecting</span>
+          </div>
+        </header>
 
-          <div class="stat-card">
-            <div class="label">Username</div>
-            <div class="value" id="username-text">${config['bot-account'].username}</div>
+        <!-- STATUS BANNER -->
+        <div class="status-banner offline" id="status-banner">
+          <div class="status-icon" id="status-icon">🔴</div>
+          <div>
+            <div class="status-label" id="status-label">Connecting...</div>
+            <div class="status-detail" id="status-detail">Establishing connection to server</div>
           </div>
-
-          <div class="stat-card">
-            <div class="label">Uptime</div>
-            <div class="value" id="uptime-text">0h 0m 0s</div>
-          </div>
-
-          <div class="stat-card">
-            <div class="label">Session Uptime</div>
-            <div class="value" id="session-uptime-text">0h 0m 0s</div>
-          </div>
-
-          <div class="stat-card">
-            <div class="label">Next Leave</div>
-            <div class="value" id="leave-timer-text">Waiting...</div>
-          </div>
-
-          <div class="stat-card">
-            <div class="label">Coordinates</div>
-            <div class="value" id="coords-text">Waiting...</div>
-          </div>
-
-          <div class="stat-card">
-            <div class="label">Last Disconnect</div>
-            <div class="value" id="disconnect-text">None</div>
-          </div>
-
-          <div class="stat-card">
-            <div class="label">Server</div>
-            <div class="value">${config.server.ip}</div>
-          </div>
-
-          <div class="action-row">
-            <a href="/tutorial" class="btn-guide">View Setup Guide</a>
-            <button id="restart-btn" class="btn-guide btn-secondary">Restart Bot</button>
-            <button id="test-webhook-btn" class="btn-guide btn-secondary">Test Webhook</button>
-          </div>
-          
-          <div class="connection-bar">
-            <div class="connection-fill" id="activity-bar"></div>
-          </div>
-          
-          <p style="color: #64748b; font-size: 12px; margin-top: 15px;">
-            Live connection to Bot Process
-          </p>
         </div>
 
+        <!-- STATS GRID -->
+        <div class="grid">
+          <div class="card">
+            <div class="card-label">Total Uptime</div>
+            <div class="card-value" id="uptime">0h 0m 0s</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Session Uptime</div>
+            <div class="card-value" id="session-uptime">0h 0m 0s</div>
+          </div>
+          <div class="card full">
+            <div class="card-label">Next Planned Leave</div>
+            <div class="card-value" id="next-leave">Waiting...</div>
+            <div class="session-bar-wrap">
+              <div class="session-bar-bg"><div class="session-bar-fill"></div></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-label">Username</div>
+            <div class="card-value" id="username">${config['bot-account'].username}</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Reconnect Attempts</div>
+            <div class="card-value" id="reconnects">0</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Memory Usage</div>
+            <div class="card-value" id="memory">—</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Coordinates</div>
+            <div class="card-value small" id="coords">Unknown</div>
+          </div>
+          <div class="card full">
+            <div class="card-label">Last Disconnect Reason</div>
+            <div class="card-value small" id="disconnect">None</div>
+          </div>
+        </div>
+
+        <!-- BUTTONS -->
+        <div class="btn-row">
+          <a href="/tutorial" class="btn btn-primary">📖 Setup Guide</a>
+          <button class="btn btn-ghost" id="btn-restart">🔄 Restart Bot</button>
+          <button class="btn btn-ghost" id="btn-webhook">🔔 Test Webhook</button>
+        </div>
+
+        <footer>Auto-refreshes every second &nbsp;·&nbsp; Slobos AFK Bot</footer>
+
         <script>
-          const formatUptime = (seconds) => {
-            const h = Math.floor(seconds / 3600);
-            const m = Math.floor((seconds % 3600) / 60);
-            const s = seconds % 60;
-            return \`\${h}h \${m}m \${s}s\`;
+          const fmt = s => {
+            const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+            return h > 0 ? \`\${h}h \${m}m \${sec}s\` : m > 0 ? \`\${m}m \${sec}s\` : \`\${sec}s\`;
           };
 
-          const updateStats = async () => {
+          // Extract readable reason from raw JSON disconnect strings
+          const cleanReason = raw => {
+            if (!raw || raw === 'None') return 'None';
             try {
-              const res = await fetch('/health');
-              const data = await res.json();
-              
-              const statusText = document.getElementById('status-text');
-              const usernameText = document.getElementById('username-text');
-              const uptimeText = document.getElementById('uptime-text');
-              const sessionUptimeText = document.getElementById('session-uptime-text');
-              const leaveTimerText = document.getElementById('leave-timer-text');
-              const coordsText = document.getElementById('coords-text');
-              const disconnectText = document.getElementById('disconnect-text');
-              const liveDot = document.getElementById('live-indicator');
-              const container = document.getElementById('main-container');
+              // Try to extract text fields from JSON-like strings
+              const texts = [];
+              const regex = /"text":"([^"]+)"/g;
+              let m;
+              while ((m = regex.exec(raw)) !== null) {
+                const t = m[1].replace(/\\\\n/g,'').trim();
+                if (t) texts.push(t);
+              }
+              if (texts.length) return texts.join(' ').trim();
+            } catch(e) {}
+            // Strip kind prefix like "generic: ..."
+            return raw.replace(/^\\w+:\\s*/, '').slice(0, 120);
+          };
 
-              // Update Status
-              if (data.status === 'connected') {
-                statusText.innerHTML = '<span class="status-dot" style="color: #4ade80;"></span> Online & Running';
-                statusText.style.color = '#2dd4bf';
-                liveDot.style.color = '#4ade80'; // Green pulse
-                container.style.boxShadow = '0 0 50px rgba(45, 212, 191, 0.2)';
-              } else if (data.status === 'paused-banned') {
-                statusText.innerHTML = '<span class="status-dot" style="color: #f59e0b;"></span> Paused (Ban Detected)';
-                statusText.style.color = '#f59e0b';
-                liveDot.style.color = '#f59e0b';
-                container.style.boxShadow = '0 0 50px rgba(245, 158, 11, 0.2)';
+          const update = async () => {
+            try {
+              const r = await fetch('/health');
+              const d = await r.json();
+
+              const banner   = document.getElementById('status-banner');
+              const icon     = document.getElementById('status-icon');
+              const label    = document.getElementById('status-label');
+              const detail   = document.getElementById('status-detail');
+              const dot      = document.getElementById('pulse-dot');
+              const liveLabel= document.getElementById('live-label');
+
+              banner.className = 'status-banner ';
+              if (d.status === 'connected') {
+                banner.className += 'online';
+                icon.textContent = '🟢';
+                label.textContent = 'Online & Running';
+                label.style.color = '#4ade80';
+                detail.textContent = 'Bot is connected and active on the server';
+                dot.style.background = '#4ade80';
+                liveLabel.textContent = 'Live';
+              } else if (d.status === 'paused-banned') {
+                banner.className += 'banned';
+                icon.textContent = '🟡';
+                label.textContent = 'Paused — Ban Detected';
+                label.style.color = '#fbbf24';
+                detail.textContent = 'Unban the bot on Aternos, then restart the service';
+                dot.style.background = '#fbbf24';
+                liveLabel.textContent = 'Paused';
               } else {
-                statusText.innerHTML = '<span class="status-dot" style="color: #f87171;"></span> Reconnecting...';
-                statusText.style.color = '#f87171';
-                liveDot.style.color = '#f87171'; // Red pulse
-                container.style.boxShadow = '0 0 50px rgba(248, 113, 113, 0.2)';
+                banner.className += 'offline';
+                icon.textContent = '🔴';
+                label.textContent = 'Reconnecting...';
+                label.style.color = '#f87171';
+                detail.textContent = 'Waiting to reconnect to the server';
+                dot.style.background = '#f87171';
+                liveLabel.textContent = 'Offline';
               }
 
-              // Update Uptime
-              if (data.username) {
-                usernameText.innerText = data.username;
-              }
-              uptimeText.innerText = formatUptime(data.uptime);
-              sessionUptimeText.innerText = formatUptime(data.sessionUptime || 0);
-              if (data.nextLeaveAt) {
-                const remaining = Math.max(0, Math.floor((new Date(data.nextLeaveAt).getTime() - Date.now()) / 1000));
-                leaveTimerText.innerText = remaining > 0 ? formatUptime(remaining) : 'Leaving now...';
+              document.getElementById('uptime').textContent         = fmt(d.uptime || 0);
+              document.getElementById('session-uptime').textContent = fmt(d.sessionUptime || 0);
+              document.getElementById('reconnects').textContent     = d.reconnectAttempts ?? 0;
+              document.getElementById('memory').textContent         = d.memoryUsage ? d.memoryUsage.toFixed(1) + ' MB' : '—';
+
+              if (d.nextLeaveAt) {
+                const rem = Math.max(0, Math.floor((new Date(d.nextLeaveAt) - Date.now()) / 1000));
+                document.getElementById('next-leave').textContent = rem > 0 ? 'In ' + fmt(rem) : 'Leaving now...';
               } else {
-                leaveTimerText.innerText = 'Waiting...';
+                document.getElementById('next-leave').textContent = d.status === 'connected' ? 'Calculating...' : 'Waiting...';
               }
 
-              // Update Coords
-              if (data.coords) {
-                coordsText.innerText = \`Coords: \${Math.floor(data.coords.x)}, \${Math.floor(data.coords.y)}, \${Math.floor(data.coords.z)}\`;
+              if (d.coords) {
+                document.getElementById('coords').textContent =
+                  \`X:\${Math.floor(d.coords.x)}  Y:\${Math.floor(d.coords.y)}  Z:\${Math.floor(d.coords.z)}\`;
               } else {
-                coordsText.innerText = 'Unknown Location';
+                document.getElementById('coords').textContent = 'Unknown';
               }
 
-              if (data.lastDisconnectKind && data.lastDisconnectReason) {
-                disconnectText.innerText = \`\${data.lastDisconnectKind}: \${data.lastDisconnectReason}\`;
-              } else if (data.lastDisconnectReason) {
-                disconnectText.innerText = data.lastDisconnectReason;
-              } else {
-                disconnectText.innerText = 'None';
-              }
+              const rawDisconnect = d.lastDisconnectReason || 'None';
+              document.getElementById('disconnect').textContent = cleanReason(rawDisconnect);
 
-            } catch (e) {
-              document.getElementById('status-text').innerText = 'System Offline';
-              document.getElementById('live-indicator').style.color = '#64748b'; // Grey
+            } catch(e) {
+              document.getElementById('status-label').textContent = 'Dashboard Offline';
             }
           };
 
-          const restartBtn = document.getElementById('restart-btn');
-          restartBtn.addEventListener('click', async () => {
+          document.getElementById('btn-restart').addEventListener('click', async () => {
             if (!confirm('Restart the bot now?')) return;
-            const key = prompt('Enter the dashboard restart key:');
+            const key = prompt('Enter restart key:');
             if (!key) return;
             try {
-              const res = await fetch('/restart?key=' + encodeURIComponent(key), { method: 'POST' });
-              const data = await res.json();
-              alert(data.message || 'Restart requested.');
-            } catch (err) {
-              alert('Restart failed: ' + err.message);
-            }
+              const r = await fetch('/restart?key=' + encodeURIComponent(key), { method: 'POST' });
+              alert((await r.json()).message || 'Restarting...');
+            } catch(e) { alert('Failed: ' + e.message); }
           });
 
-          const testWebhookBtn = document.getElementById('test-webhook-btn');
-          testWebhookBtn.addEventListener('click', async () => {
-            if (!confirm('Send a test Discord webhook message?')) return;
-            const key = prompt('Enter the dashboard restart key to authorize the test:');
+          document.getElementById('btn-webhook').addEventListener('click', async () => {
+            if (!confirm('Send a test Discord webhook?')) return;
+            const key = prompt('Enter restart key:');
             if (!key) return;
             try {
-              const res = await fetch('/webhook-test?key=' + encodeURIComponent(key), { method: 'POST' });
-              const data = await res.json();
-              alert(data.message || 'Webhook test requested.');
-            } catch (err) {
-              alert('Webhook test failed: ' + err.message);
-            }
+              const r = await fetch('/webhook-test?key=' + encodeURIComponent(key), { method: 'POST' });
+              alert((await r.json()).message || 'Sent!');
+            } catch(e) { alert('Failed: ' + e.message); }
           });
 
-          // Poll every 1 second
-          setInterval(updateStats, 1000);
-          updateStats();
+          setInterval(update, 1000);
+          update();
         </script>
       </body>
     </html>

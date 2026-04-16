@@ -2,6 +2,8 @@ function randomMs(minMs, maxMs) {
     return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs
 }
 
+const config = require('./settings.json');
+
 function setupLeaveRejoin(bot, createBot, markIntentionalLeave, setNextLeaveAt) {
     // Timers
     let leaveTimer = null
@@ -83,8 +85,10 @@ function setupLeaveRejoin(bot, createBot, markIntentionalLeave, setNextLeaveAt) 
         cleanup()
         stopped = false
 
-        // Stay connected long enough to look normal without creating big empty windows.
-        const stayTime = randomMs(600000, 1200000)
+        // Read from settings.json periodic-rejoin (seconds → ms)
+        const minMs = (config.utils['periodic-rejoin']['min-interval'] || 3600) * 1000
+        const maxMs = (config.utils['periodic-rejoin']['max-interval'] || 7200) * 1000
+        const stayTime = randomMs(minMs, maxMs)
         const leaveAt = Date.now() + stayTime
         if (typeof setNextLeaveAt === 'function') {
             setNextLeaveAt(leaveAt)
