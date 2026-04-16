@@ -4,6 +4,7 @@ const { GoalBlock } = goals;
 const config = require('./settings.json');
 const express = require('express');
 const http = require('http');
+const setupLeaveRejoin = require('./leaveRejoin');
 
 // ============================================================
 // EXPRESS SERVER - Keep Render/Aternos alive
@@ -436,7 +437,7 @@ app.get('/tutorial', (req, res) => {
             <li>Current Render bot username: <code>Testing</code>.</li>
             <li>If you want <strong>spectator mode</strong>, make the bot <strong>OP</strong> on Aternos so the command can work.</li>
             <li><strong>Important:</strong> The bot entry file is <code>index.js</code>, but the launch command is <code>npm start</code>.</li>
-            <li><strong>Current stay window:</strong> the bot intentionally leaves roughly every <code>10-20 minutes</code> on this Render copy.</li>
+            <li><strong>Current stay window:</strong> the bot intentionally leaves roughly every <code>1–2 hours</code> (set by <code>min-interval</code> / <code>max-interval</code> in <code>settings.json</code>).</li>
             <li><strong>Current alerts:</strong> ban/idle-kick alerts ping the Discord user ID and pause reconnects until you restart after unban.</li>
             <li><strong>Current status page:</strong> shows process uptime, session uptime, and the last disconnect reason.</li>
             <li><strong>Magic:</strong> The bot automatically pings itself to stay awake!</li>
@@ -1130,21 +1131,7 @@ function initializeModules(bot, mcData, defaultMove) {
   if (config.modules.beds) bedModule(bot, mcData);
   if (config.modules.chat) chatModule(bot);
 
-  // Periodic Rejoin
-  if (config.utils['periodic-rejoin'] && config.utils['periodic-rejoin'].enabled) {
-    periodicRejoin(bot);
-  }
-
   console.log('[Modules] All modules initialized!');
-}
-
-// Periodic Rejoin Module
-const setupLeaveRejoin = require('./leaveRejoin');
-
-// Periodic Rejoin Module - Handled by leaveRejoin.js now
-function periodicRejoin(bot) {
-  // Deprecated in favor of leaveRejoin.js
-  console.log('[Rejoin] Using new leaveRejoin system.');
 }
 
 // ============================================================

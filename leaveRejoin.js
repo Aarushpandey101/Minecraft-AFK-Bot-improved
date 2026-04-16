@@ -2,8 +2,6 @@ function randomMs(minMs, maxMs) {
     return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs
 }
 
-const config = require('./settings.json');
-
 function setupLeaveRejoin(bot, createBot, markIntentionalLeave, setNextLeaveAt) {
     // Timers
     let leaveTimer = null
@@ -78,6 +76,9 @@ function setupLeaveRejoin(bot, createBot, markIntentionalLeave, setNextLeaveAt) 
     }
 
     function armLeaveCycle() {
+        // Read config fresh every time (avoids stale cached values)
+        const config = require('./settings.json');
+
         // reset attempt counter on successful connect
         reconnectAttempts = 0
 
