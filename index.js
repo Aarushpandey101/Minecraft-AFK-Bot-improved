@@ -24,6 +24,7 @@ let botState = {
   startTime: Date.now(),
   lastSpawnAt: null,
   nextLeaveAt: null,
+  sessionLeaveRange: null, // { min, max } ms — total session window for progress bar
   errors: [],
   banPaused: false,
   banReason: null,
@@ -148,11 +149,9 @@ app.get('/', (req, res) => {
           .session-bar-fill {
             height: 100%; background: var(--teal);
             border-radius: 4px;
-            animation: flow 2s linear infinite;
-            background-size: 200% 100%;
+            transition: width 1s linear;
             background-image: linear-gradient(90deg, var(--teal) 0%, #67e8f9 50%, var(--teal) 100%);
           }
-          @keyframes flow { 0%{background-position:100% 0} 100%{background-position:-100% 0} }
 
           /* BUTTONS */
           .btn-row {
@@ -224,7 +223,7 @@ app.get('/', (req, res) => {
             <div class="card-label">Next Planned Leave</div>
             <div class="card-value" id="next-leave">Waiting...</div>
             <div class="session-bar-wrap">
-              <div class="session-bar-bg"><div class="session-bar-fill"></div></div>
+              <div class="session-bar-bg"><div class="session-bar-fill" style="width:0%"></div></div>
             </div>
           </div>
           <div class="card">
@@ -326,11 +325,24 @@ app.get('/', (req, res) => {
               document.getElementById('reconnects').textContent     = d.reconnectAttempts ?? 0;
               document.getElementById('memory').textContent         = d.memoryUsage ? d.memoryUsage.toFixed(1) + ' MB' : '—';
 
-              if (d.nextLeaveAt) {
-                const rem = Math.max(0, Math.floor((new Date(d.nextLeaveAt) - Date.now()) / 1000));
+              if (d.nextLeaveInSeconds !== null && d.nextLeaveInSeconds !== undefined) {
+                const rem = d.nextLeaveInSeconds;
                 document.getElementById('next-leave').textContent = rem > 0 ? 'In ' + fmt(rem) : 'Leaving now...';
+
+                // Real progress bar: how far through the session window are we?
+                const bar = document.querySelector('.session-bar-fill');
+                if (bar && d.sessionLeaveRange && d.sessionLeaveRange.stayTime) {
+                  const totalMs = d.sessionLeaveRange.stayTime;
+                  const elapsedMs = totalMs - (rem * 1000);
+                  const pct = Math.min(100, Math.max(0, (elapsedMs / totalMs) * 100));
+                  bar.style.width = pct.toFixed(1) + '%';
+                } else if (bar) {
+                  bar.style.width = '100%';
+                }
               } else {
                 document.getElementById('next-leave').textContent = d.status === 'connected' ? 'Calculating...' : 'Waiting...';
+                const bar = document.querySelector('.session-bar-fill');
+                if (bar) bar.style.width = d.status === 'connected' ? '0%' : '0%';
               }
 
               if (d.coords) {
@@ -448,6 +460,8 @@ app.get('/health', (req, res) => {
     sessionUptime,
     lastSpawnAt: botState.lastSpawnAt ? new Date(botState.lastSpawnAt).toISOString() : null,
     nextLeaveAt: botState.nextLeaveAt ? new Date(botState.nextLeaveAt).toISOString() : null,
+    nextLeaveInSeconds: botState.nextLeaveAt ? Math.max(0, Math.floor((botState.nextLeaveAt - Date.now()) / 1000)) : null,
+    sessionLeaveRange: botState.sessionLeaveRange || null,
     coords: (bot && bot.entity) ? bot.entity.position : null,
     lastActivity: botState.lastActivity,
     reconnectAttempts: botState.reconnectAttempts,
@@ -851,8 +865,9 @@ function createBot() {
       initializeModules(bot, mcData, defaultMove);
 
       // Setup enhanced Leave/Rejoin logic
-      setupLeaveRejoin(bot, createBot, markIntentionalLeave, (nextLeaveAt) => {
+      setupLeaveRejoin(bot, createBot, markIntentionalLeave, (nextLeaveAt, leaveRange) => {
         botState.nextLeaveAt = nextLeaveAt;
+        if (leaveRange) botState.sessionLeaveRange = leaveRange;
       });
 
       setTimeout(() => {
@@ -887,6 +902,8 @@ function createBot() {
     bot.on('end', (reason) => {
       if (attemptId !== currentConnectAttempt) return;
       clearConnectionTimeout();
+      botState.nextLeaveAt = null;
+      botState.sessionLeaveRange = null;
       const normalizedReason = normalizeReason(reason);
       const disconnectInfo = classifyDisconnectReason(normalizedReason);
       botState.lastDisconnectReason = cleanBanReason(normalizedReason);
@@ -921,6 +938,8 @@ function createBot() {
     bot.on('kicked', (reason) => {
       if (attemptId !== currentConnectAttempt) return;
       clearConnectionTimeout();
+      botState.nextLeaveAt = null;
+      botState.sessionLeaveRange = null;
       const normalizedReason = normalizeReason(reason);
       const disconnectInfo = classifyDisconnectReason(normalizedReason);
       botState.lastDisconnectReason = cleanBanReason(normalizedReason);

@@ -91,7 +91,7 @@ function setupLeaveRejoin(bot, createBot, markIntentionalLeave, setNextLeaveAt) 
         const stayTime = randomMs(minMs, maxMs)
         const leaveAt = Date.now() + stayTime
         if (typeof setNextLeaveAt === 'function') {
-            setNextLeaveAt(leaveAt)
+            setNextLeaveAt(leaveAt, { min: minMs, max: maxMs, stayTime })
         }
 
         logThrottled(`[AFK] Will leave in ${Math.round(stayTime / 1000)} seconds`)
